@@ -24,12 +24,18 @@ ctrl_c() {
 }
 
 # Executes the cleanup in the boot node.
-clenup_boot_node() {
+cleanup_boot_node() {
 /usr/bin/ssh $user@$ipBootNode "bash -s" << EOF
     echo "hostname of the machine is : "
     /bin/hostname
-    /usr/bin/sudo docker run --net=host -t -e LICENSE=accept -v \
-    "$(pwd)":/installer/cluster ibmcom/icp-inception-$(uname -m | sed 's/x86_64/amd64/g'):$version uninstall
+    echo "Executing command to uninstall ICP : "
+    if [ $ifEE == "yes" ]; then
+       /usr/bin/sudo docker run --net=host -t -e LICENSE=accept -v \
+       "$(pwd)":/installer/cluster ibmcom/icp-inception-$(uname -m | sed 's/x86_64/amd64/g'):$version uninstall
+    else
+       /usr/bin/sudo docker run --net=host -t -e LICENSE=accept -v \
+       "$(pwd)":/installer/cluster ibmcom/icp-inception:$version uninstall
+    fi
     echo "Executing command for removing leftover docker containers and images"
     /usr/bin/docker system prune -a -f
     echo "Removing /var/lib/docker  and restarting docker service"
@@ -40,9 +46,9 @@ EOF
 }
 
 # Executes the cleanup in all the boot node.
-clenup_all_other_nodes() {
+cleanup_all_other_nodes() {
 echo "ssh to each cluster node for cleanup ..."
-for node_ip in $( /usr/bin/grep -E "^[^#[]" "$installationDirPath"/cluster/hosts | sort -u | sed 's/|/\n/g' ); do
+for node_ip in $( grep -E "^[^#[]" "$installationDirPath"/cluster/hosts | sort -u | sed 's/|/\n/g' ); do
    /usr/bin/ssh $user@"$node_ip" "bash -s" << EOF
    echo "hostname of the machine is : "
    /bin/hostname
@@ -86,13 +92,16 @@ if [[ ! $ANSWER =~ ^[Yy]$ ]]; then
     echo "Enter the ICP version you want to uninstall e.g. 3.1.1-ee"
     read version
 
+    echo "Is it Enterprise Edition (yes/no) ?"
+    read ifEE
+
     echo "Enter installation directory path e.g. /opt/ibm-cloud-private-ppc64le-3.1.1 : "
     read installationDirPath
 
     cd $installationDirPath/cluster || exit
 
-    clenup_boot_node
-    clenup_all_other_nodes
+    cleanup_boot_node
+    cleanup_all_other_nodes
 
     echo "Rebooting the boot node"
     reboot
